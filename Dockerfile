@@ -1,4 +1,4 @@
-# 1. Use a stable Python image that supports apt-get
+# 1. Use a stable Python base image
 FROM python:3.11-slim
 
 # 2. Install FFmpeg as a system package
@@ -16,8 +16,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 5. Copy the rest of the application code
 COPY . .
 
-# 6. Expose the port (Render handles mapping)
+# 6. Expose the port (Render handles mapping, but good practice)
 EXPOSE 10000
 
-# 7. Set the startup command
-CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:$PORT"]
+# 7. Set the startup command using the shell form to expand $PORT
+# FIX: The command is executed by the shell, ensuring $PORT is substituted.
+CMD gunicorn app:app --bind 0.0.0.0:$PORT
