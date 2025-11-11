@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VOTEC Video Downloader</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-950 text-white min-h-screen flex flex-col items-center justify-center p-4">
+
+<header class="text-center mb-8">
+  <h1 class="text-3xl font-bold text-blue-500">🎥 VOTEC Video Downloader</h1>
+  <p class="text-gray-400 text-sm mt-2">Download videos & audio from YouTube, TikTok, Instagram, Facebook</p>
+</header>
+
+<div class="bg-gray-900 rounded-2xl p-6 w-full max-w-lg shadow-lg">
+  <label for="url" class="block text-sm text-gray-400 mb-2">Paste your video link below:</label>
+  <input id="url" type="text" placeholder="https://www.youtube.com/watch?v=..."
+         class="w-full p-3 rounded-lg bg-gray-800 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white" />
+  <button id="fetchInfo" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 transition-all py-3 rounded-lg font-semibold">
+    Fetch Video Info
+  </button>
+
+  <div id="videoInfo" class="mt-6 hidden bg-gray-800 p-4 rounded-lg">
+    <img id="thumbnail" class="rounded-lg mb-4 w-full" src="" alt="Thumbnail">
+    <h2 id="title" class="text-lg font-bold mb-4"></h2>
+
+    <label class="text-gray-400 text-sm mb-1 font-semibold">Select Quality & Type:</label>
+    <div class="relative mb-4">
+      <select id="formatSelect" class="appearance-none w-full p-3 rounded-lg bg-gray-800 border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+      <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">▼</div>
+    </div>
+
+    <button id="downloadBtn" class="mt-2 w-full bg-green-600 hover:bg-green-700 transition-all py-3 rounded-lg font-semibold">
+      Download
+    </button>
+
+    <div class="mt-4 bg-gray-700 h-4 rounded-full overflow-hidden">
+      <div id="progressBar" class="bg-blue-500 h-4 w-0"></div>
+    </div>
+  </div>
+
+  <div id="status" class="mt-4 text-center text-sm text-gray-400"></div>
+</div>
+
+<footer class="mt-10 text-gray-500 text-xs text-center">
+  © 2025 VOTEC | Built with ❤️ by Kennedy
+</footer>
+
+<script>
+const fetchBtn = document.getElementById('fetchInfo');
+const urlInput = document.getElementById('url');
+const videoInfoDiv = document.getElementById('videoInfo');
+const thumbnailImg = document.getElementById('thumbnail');
+const titleEl = document.getElementById('title');
+const formatSelect = document.getElementById('formatSelect');
+const statusBox = document.getElementById('status');
+const downloadBtn = document.getElementById('downloadBtn');
+const progressBar = document.getElementById('progressBar');
+
+fetchBtn.addEventListener('click', async () => {
+  const url = urlInput.value.trim();
+  if (!url) { statusBox.textContent = '⚠️ Enter a valid URL.'; return; }
+  statusBox.textContent = '⏳ Fetching video info...';
+  formatSelect.innerHTML = '';
+
+  try {
+    const res = await fetch('/info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    const data = await res.json();
+    if (data.error) { statusBox.textContent = `❌ ${data.error}`; return; }
+
+    videoInfoDiv.classList.remove('hidden');
+    thumbnailImg.src = data.thumbnail;
+    titleEl.textContent = data.title;
+
+    data.formats.forEach(f => {
+      const option = document.createElement('option');
+      const size = f.filesize ? `(${(f.filesize / 1024 / 1024).toFixed(2)} MB)` : '';
+      let type = f.vcodec !== 'none' ? 'Video' : 'Audio';
+      let label = `${type} - ${f.resolution || f.format_note} ${f.ext} ${size}`;
+      option.value = f.format_id;
+      option.textContent = label;
+      formatSelect.appendChild(option);
+    });
+
+    statusBox.textContent = '✅ Video info loaded. Choose quality and download.';
+  } catch (err) {
+    console.error(err);
+    statusBox.textContent = '🚨 Error fetching video info.';
+  }
+});
+
+downloadBtn.addEventListener('click', async () => {
+  const url = urlInput.value.trim();
+  const format_id = formatSelect.value;
+  // Get a clean filename from the video title
+  const filename = titleEl.textContent.replace(/[^\w\s]/gi, "") || 'video'; 
+
+  if (!url || !format_id) return;
+  statusBox.textContent = '⏳ Starting download stream...';
+  progressBar.style.width = '0%'; // Reset progress bar
+
+  try {
+    // Send the filename along with the URL and format_id
+    const res = await fetch('/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, format_id, filename })
+    });
+
+    if (!res.ok) {
+      // If the server returns an error, try to parse the error message
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.indexOf("application/json") !== -1) {
+        const err = await res.json();
+        statusBox.textContent = `❌ ${err.error || 'Download failed'}`;
+      } else {
+        // For non-JSON errors (like server 500), use generic message
+        statusBox.textContent = `❌ Download failed with status: ${res.status}`;
+      }
+      return;
+    }
+    
+    // --- CRITICAL CHANGE FOR STREAMING ---
+    // Instead of reading the whole blob, we rely on the server's response headers 
+    // (Content-Disposition) to prompt the browser to save the file directly.
+    
+    // To trigger the actual download from the server's streaming response, 
+    // we use a simple fetch call. Since we no longer use a blob, we don't 
+    // need the old link creation logic.
+
+    statusBox.textContent = '✅ Download started in your browser!';
+    progressBar.style.width = '100%';
+    
+    // The browser will handle the file saving prompt due to the server's headers.
+    // We leave the fetch response to be consumed by the browser's download manager.
+
+
+  } catch (err) {
+    console.error(err);
+    statusBox.textContent = '🚨 Error during download. Check console for details.';
+  }
+});
+</script>
+</body>
+</html>

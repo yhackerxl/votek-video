@@ -1,0 +1,3 @@
+Flask
+yt-dlp
+gunicorn # A production-ready HTTP server for Python web apps
