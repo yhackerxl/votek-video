@@ -1,3 +1,4 @@
 Flask
 yt-dlp
-gunicorn # A production-ready HTTP server for Python web apps
+gunicorn # A production-ready HTTP server for Python web appsField,Value,Explanation
+,"This command installs the FFmpeg binary (system dependency) and then installs Flask, yt-dlp, and gunicorn (Python dependencies)."
